@@ -73,7 +73,8 @@ public class DockerRiakCluster implements TestRule {
                             List<String> volumes,
                             int nodes,
                             boolean reset,
-                            int timeout) {
+                            int timeout,
+                            DefaultDockerClient.Builder builder) {
     this.name = name;
     this.pbPort = pbPort;
     this.httpPort = httpPort;
@@ -82,9 +83,8 @@ public class DockerRiakCluster implements TestRule {
     this.nodes = nodes;
     this.reset = reset;
     this.timeout = timeout;
-
     try {
-      this.docker = DefaultDockerClient.fromEnv().build();
+      this.docker = (null != builder ? builder.build() : DefaultDockerClient.fromEnv().build());
     } catch (DockerCertificateException e) {
       throw new RuntimeException(e.getMessage(), e);
     }
@@ -113,10 +113,6 @@ public class DockerRiakCluster implements TestRule {
 
   public static Builder create() {
     return new Builder();
-  }
-
-  public static Builder create(String name) {
-    return new Builder().name(name);
   }
 
   private final class DockerRiakClusterStatement extends Statement {
@@ -183,7 +179,10 @@ public class DockerRiakCluster implements TestRule {
       // Create and start new containers
       containerNames
           .map(name -> {
-            HostConfig.Builder hostConfig = HostConfig.builder().publishAllPorts(true);
+            HostConfig.Builder hostConfig = HostConfig.builder()
+                .dns("172.17.0.1")
+                .dnsSearch("weave.local.")
+                .publishAllPorts(true);
             if (!name.endsWith("1")) {
               hostConfig.links(cluster1 + ":" + baseName + 1);
             }
@@ -291,6 +290,7 @@ public class DockerRiakCluster implements TestRule {
     private int nodes = 1;
     private boolean reset = true;
     private int timeout = 30;
+    private DefaultDockerClient.Builder builder;
 
     public Builder name(String name) {
       this.name = name;
@@ -332,8 +332,23 @@ public class DockerRiakCluster implements TestRule {
       return this;
     }
 
+    public Builder clientBuilder(DefaultDockerClient.Builder builder) {
+      this.builder = builder;
+      return this;
+    }
+
     public DockerRiakCluster build() {
-      return new DockerRiakCluster(name, pbPort, httpPort, baseImage, volumes, nodes, reset, timeout);
+      return new DockerRiakCluster(
+          name,
+          pbPort,
+          httpPort,
+          baseImage,
+          volumes,
+          nodes,
+          reset,
+          timeout,
+          builder
+      );
     }
   }
 
