@@ -13,6 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+plugins {
+  id 'java'
+  id 'com.github.johnrengelman.shadow' version '1.2.3'
+}
 
 group 'com.basho.riak'
 version '0.1.0-SNAPSHOT'
@@ -53,4 +57,29 @@ dependencies {
 
 task wrapper(type: Wrapper) {
   gradleVersion = "$gradleVersion"
+}
+
+
+shadowJar {
+  classifier = ''
+  dependencies {
+    include(dependency('com.google.guava:guava'))
+    include(dependency('javax.ws.rs:javax.ws.rs-api'))
+    include(dependency('com.fasterxml.jackson.core:jackson-core'))
+    include(dependency('com.fasterxml.jackson.core:jackson-databind'))
+    include(dependency('com.fasterxml.jackson.jaxrs:jackson-jaxrs-json-provider'))
+    include(dependency('com.fasterxml.jackson.jaxrs:jackson-jaxrs-base'))
+    include(dependency('com.fasterxml.jackson.datatype:jackson-datatype-guava'))
+    include(dependency('com.fasterxml.jackson.core:jackson-annotations'))
+    include(dependency('org.glassfish.jersey.core:jersey-client'))
+    include(dependency('org.glassfish.jersey.core:jersey-common'))
+    include(dependency('org.glassfish.jersey.media:jersey-media-json-jackson'))
+    include(dependency('org.glassfish.jersey.connectors:jersey-apache-connector'))
+    include(dependency('org.glassfish.jersey.ext:jersey-entity-filtering'))
+    include(dependency('com.spotify:docker-client'))
+  }
+  relocate 'com.google', 'shaded.com.google'
+  relocate 'javax.ws.rs', 'shaded.javax.ws.rs'
+  relocate 'com.fasterxml.jackson', 'shaded.com.fasterxml.jackson'
+  relocate 'org.glassfish.jersey', 'shaded.org.glassfish.jersey'
 }
