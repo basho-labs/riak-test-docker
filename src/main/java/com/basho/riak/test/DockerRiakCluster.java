@@ -180,8 +180,6 @@ public class DockerRiakCluster implements TestRule {
       containerNames
           .map(name -> {
             HostConfig.Builder hostConfig = HostConfig.builder()
-                .dns("172.17.0.1")
-                .dnsSearch("weave.local.")
                 .publishAllPorts(true);
             if (!name.endsWith("1")) {
               hostConfig.links(cluster1 + ":" + baseName + 1);
