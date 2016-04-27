@@ -41,7 +41,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.LockSupport;
 
 /**
  * @author Jon Brisbin <jbrisbin@basho.com>
@@ -233,10 +232,40 @@ public class DockerRiakCluster implements TestRule {
               httpHosts.add(new InetSocketAddress(ip, Integer.parseInt(b.hostPort())));
 
               // Wait for Riak to fully start
-              String riakAdmin = docker.execCreate(container.id(), new String[]{"riak-admin", "wait-for-service", "riak_kv"});
+              String riakAdmin = docker.execCreate(
+                  container.id(),
+                  new String[]{"riak-admin", "wait-for-service", "riak_kv"}
+              );
               try (LogStream out = docker.execStart(riakAdmin)) {
                 while (docker.execInspect(riakAdmin).running()) {
-                  LockSupport.parkNanos(1000000);
+                  Thread.sleep(1000);
+                }
+              }
+
+              // Wait for cluster to settle
+              for (; ; ) {
+                String clusterStatus = docker.execCreate(
+                    container.id(),
+                    new String[]{"/var/lib/riak/cluster-status.sh"},
+                    DockerClient.ExecCreateParam.attachStdout()
+                );
+                try (LogStream out = docker.execStart(clusterStatus)) {
+                  String stdout = out.readFully();
+                  int settled = 0;
+                  String[] lines = stdout.split("\r\n");
+                  for (String line : lines) {
+                    String[] fields = line.split(",");
+                    double percent = Double.parseDouble(fields[3]);
+                    if (percent > 0.0) {
+                      settled++;
+                    }
+                  }
+                  if (settled == lines.length) {
+                    // Cluster is all settled
+                    break;
+                  } else {
+                    Thread.sleep(1000);
+                  }
                 }
               }
             } catch (Exception e) {
