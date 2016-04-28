@@ -255,10 +255,13 @@ public class DockerRiakCluster implements TestRule {
                   String[] lines = stdout.split("\r\n");
                   for (String line : lines) {
                     String[] fields = line.split(",");
-                    double percent = Double.parseDouble(fields[3]);
-                    if (percent > 0.0) {
+                    if ("--".equals(fields[4])) {
                       settled++;
                     }
+//                    double percent = Double.parseDouble(fields[3]);
+//                    if (percent > 0.0) {
+//                      settled++;
+//                    }
                   }
                   if (settled == lines.length) {
                     // Cluster is all settled
