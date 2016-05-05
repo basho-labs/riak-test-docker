@@ -15,7 +15,7 @@ Make sure you've added the Basho Bintray repo by going here [https://bintray.com
 <dependency>
   <groupId>com.basho.riak</groupId>
   <artifactId>riak-test-docker</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.0-SNAPSHOT</version>
   <scope>test</scope>
 </dependency>
 ```
@@ -24,7 +24,7 @@ Make sure you've added the Basho Bintray repo by going here [https://bintray.com
 
 ```groovy
 ext {
-  riakTestDockerVersion = '0.1.0'
+  riakTestDockerVersion = '0.1.0-SNAPSHOT'
 }
 
 dependencies {
@@ -36,7 +36,7 @@ dependencies {
 
 ```scala
 libraryDependencies ++= {
-  val riakTestDockerVersion = "0.1.0"
+  val riakTestDockerVersion = "0.1.0-SNAPSHOT"
 
   Seq(
     "com.basho.riak" % "riak-test-docker" % riakTestDockerVersion % "test"
@@ -46,16 +46,27 @@ libraryDependencies ++= {
 
 ### Creating a test
 
-Create a test in the normal way. The only difference with using `riak-test-docker` is to add either a `@ClassRule` or a `@Rule` in your test on an instance of `DockerRiakCluster`. There is a small DSL you can use to configure the cluster.
+Create a test in the normal way. The only difference with using `riak-test-docker` is to add either a `@ClassRule` or a `@Rule` in your test on an instance of `DockerRiakCluster`. Pass configuration into the rule via the case class `RiakCluster`.
 
-The following creates a static `@ClassRule` which will be invoked once at initialization of the test class and will then be cleaned up after all the tests are run. It will not destroy and re-create the cluster after each test (you'd use a normal `@Rule` for that).
+The following creates a `@ClassRule` which will be invoked once at initialization of the test class and will then be cleaned up after all the tests are run. It will not destroy and re-create the cluster after each test (you'd use a normal `@Rule` for that).
 
-```java
+```scala
+import org.junit.{Rule, Test}
+import scala.concurrent.duration._
+
+class MyTests {
+
+  @Test
+  def testSomeFunctionality() = {}
+  
+}
+
+object MyTests {
+
   @ClassRule
-  public static DockerRiakCluster cluster = DockerRiakCluster.create()
-      .nodes(3)
-      .baseImage("basho/riak")
-      .build();
+  def cluster = DockerRiakCluster(RiakCluster(nodes = 3, timeout = 2 minutes, image = "basho/riak-ts"))
+
+}
 ```
 
 NOTE: Creating a Docker image for Riak that includes auto-clustering can be done using the `docker.mk` enabled source found here: [https://github.com/basho-labs/docker-images/tree/master/riak](https://github.com/basho-labs/docker-images/tree/master/riak)

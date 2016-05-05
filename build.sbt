@@ -34,9 +34,8 @@ lazy val riakTestDocker = (project in file("."))
         // "org.json4s" %% "json4s-jackson" % "3.3.0",
 
         // Akka
-        // "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-        // "com.typesafe.akka" %% "akka-http-core" % akkaVersion,
-        // "de.heikoseeberger" %% "akka-http-json4s" % "1.6.0",
+         "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+         "com.typesafe.akka" %% "akka-http-core" % akkaVersion,
 
         "com.basho.riak.protobuf" % "riak-pb" % "2.1.1.1-SNAPSHOT",
 
