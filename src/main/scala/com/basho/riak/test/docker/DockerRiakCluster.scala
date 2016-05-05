@@ -19,9 +19,9 @@ import scala.util.{Failure, Success, Try}
 /**
   * @author Jon Brisbin <jbrisbin@basho.com>
   */
-class RiakDockerCluster(config: RiakCluster) extends TestRule {
+class DockerRiakCluster(config: RiakCluster) extends TestRule {
 
-  val log = LoggerFactory.getLogger(classOf[RiakDockerCluster])
+  val log = LoggerFactory.getLogger(classOf[DockerRiakCluster])
   val charset = Charset.defaultCharset().toString
   val docker = Docker()
 
@@ -156,8 +156,8 @@ class RiakDockerCluster(config: RiakCluster) extends TestRule {
 
 }
 
-object RiakDockerCluster {
-  def apply(): RiakDockerCluster = RiakDockerCluster(RiakCluster())
+object DockerRiakCluster {
+  def apply(): DockerRiakCluster = DockerRiakCluster(RiakCluster())
 
-  def apply(config: RiakCluster): RiakDockerCluster = new RiakDockerCluster(config)
+  def apply(config: RiakCluster): DockerRiakCluster = new DockerRiakCluster(config)
 }
