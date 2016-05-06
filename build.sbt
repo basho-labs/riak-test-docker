@@ -1,5 +1,7 @@
 import net.virtualvoid.sbt.graph.Plugin._
 
+import scala.util.Properties
+
 lazy val riakTestDocker = (project in file("."))
   .enablePlugins(JavaAppPackaging)
   .settings(
@@ -14,8 +16,23 @@ lazy val riakTestDocker = (project in file("."))
       val art = (artifact in (Compile, assembly)).value
       art.copy(`classifier` = None)
     },
-
     addArtifact(artifact in (Compile, assembly), assembly),
+
+    publishTo := {
+      val artifactory = "https://basholabs.artifactoryonline.com/basholabs"
+      if (version.value.trim.endsWith("SNAPSHOT"))
+        Some("Artifactory Realm" at s"$artifactory/libs-snapshot-local")
+      else
+        Some("Artifactory Realm" at s"$artifactory/libs-release-local")
+    },
+
+    credentials := Seq(Credentials(
+      "Artifactory Realm",
+      "basholabs.artifactoryonline.com",
+      Properties.envOrElse("ARTIFACTORY_USER", ""),
+      Properties.envOrElse("ARTIFACTORY_PASS", "")
+    )),
+    publishMavenStyle := true,
 
     resolvers ++= Seq(
       "Local Maven Repo" at "file:///" + Path.userHome + "/.m2/repository",
