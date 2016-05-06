@@ -10,7 +10,7 @@ import scala.concurrent.duration._
 class RiakDockerClusterTests {
 
   @Test
-  def canCreate1NodeCluster() = {
+  def canCreateCluster() = {
 
   }
 
