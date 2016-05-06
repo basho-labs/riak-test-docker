@@ -10,6 +10,13 @@ lazy val riakTestDocker = (project in file("."))
     name := "riak-test-docker",
     version := "0.1.0-SNAPSHOT",
 
+    artifact in (Compile, assembly) := {
+      val art = (artifact in (Compile, assembly)).value
+      art.copy(`classifier` = None)
+    },
+
+    addArtifact(artifact in (Compile, assembly), assembly),
+
     resolvers ++= Seq(
       "Local Maven Repo" at "file:///" + Path.userHome + "/.m2/repository",
       Resolver.sonatypeRepo("snapshots"),
@@ -36,8 +43,6 @@ lazy val riakTestDocker = (project in file("."))
         // Akka
         "com.typesafe.akka" %% "akka-stream" % akkaVersion,
         "com.typesafe.akka" %% "akka-http-core" % akkaVersion,
-
-        "com.basho.riak.protobuf" % "riak-pb" % "2.1.1.1-SNAPSHOT",
 
         // Akka HTTP Docker
         "com.jbrisbin.docker" %% "akka-http-docker" % "0.1.0-SNAPSHOT",
