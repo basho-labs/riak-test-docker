@@ -12,6 +12,7 @@ lazy val riakTestDocker = (project in file("."))
 
     resolvers ++= Seq(
       "Local Maven Repo" at "file:///" + Path.userHome + "/.m2/repository",
+      Resolver.sonatypeRepo("snapshots"),
       Resolver.bintrayRepo("hseeberger", "maven")
     ),
 
@@ -31,20 +32,15 @@ lazy val riakTestDocker = (project in file("."))
 
         // Jackson JSON
         "com.fasterxml.jackson.module" %% "jackson-module-scala" % jacksonVersion,
-        // "org.json4s" %% "json4s-jackson" % "3.3.0",
 
         // Akka
-         "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-         "com.typesafe.akka" %% "akka-http-core" % akkaVersion,
+        "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+        "com.typesafe.akka" %% "akka-http-core" % akkaVersion,
 
         "com.basho.riak.protobuf" % "riak-pb" % "2.1.1.1-SNAPSHOT",
 
         // Akka HTTP Docker
         "com.jbrisbin.docker" %% "akka-http-docker" % "0.1.0-SNAPSHOT",
-
-        // SSL
-        // "org.apache.httpcomponents" % "httpclient" % "4.5.2",
-        // "org.bouncycastle" % "bcpkix-jdk15on" % "1.54",
 
         // Testing
         "org.hamcrest" % "hamcrest-library" % "1.3" % "test",
