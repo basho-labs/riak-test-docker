@@ -6,11 +6,11 @@ import scala.concurrent.duration._
   * @author Jon Brisbin <jbrisbin@basho.com>
   */
 case class RiakCluster(name: Option[String] = None,
-                       image:String="alpine",
+                       image: String = "alpine",
                        nodes: Int = 1,
                        volumes: Seq[(String, String)] = Seq.empty,
                        timeout: FiniteDuration = 60 seconds,
-                       statusTimeout:FiniteDuration = 10 seconds,
-                       primaryNode:Option[String]=None) {
+                       statusTimeout: FiniteDuration = 7 seconds,
+                       primaryNode: Option[String] = None) {
 
 }

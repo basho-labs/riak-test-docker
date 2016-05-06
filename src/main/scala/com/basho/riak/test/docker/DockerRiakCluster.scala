@@ -2,6 +2,7 @@ package com.basho.riak.test.docker
 
 import java.nio.charset.Charset
 
+import akka.actor.ActorDSL._
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.stream.scaladsl.Source
@@ -13,7 +14,7 @@ import org.junit.runners.model.Statement
 import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, Future, Promise}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -27,7 +28,7 @@ class DockerRiakCluster(config: RiakCluster) extends TestRule {
 
   implicit val timeout: Timeout = Timeout(config.timeout)
 
-  import docker.materializer
+  import docker.system
   import docker.system.dispatcher
 
   override def apply(base: Statement, description: Description): Statement = {
@@ -120,24 +121,32 @@ class DockerRiakCluster(config: RiakCluster) extends TestRule {
           }
 
         // Wait for cluster to settle
-        val src = Source.tick(config.statusTimeout, config.statusTimeout, Exec(Seq("riak-admin", "ring-status")))
-        Await.result(
-          src.runForeach(ex => {
-            (for {
-              stdout <- containers.head._2 ? ex
-            } yield stdout match {
-              case bytes: ByteString => bytes.decodeString(charset).split("\n").count(_.contains("Waiting on:"))
-            }) onSuccess {
-              case 0 => src.mapMaterializedValue(_.cancel())
+        val settled = Promise[Boolean]()
+        val checker = actor(new Act {
+          become {
+            case ex: Exec => (containers.head._2 ? ex) onSuccess {
+              case bytes: ByteString =>
+                bytes.decodeString(charset).split("\n").count(_.contains("Waiting on:")) match {
+                  case 0 => {
+                    settled.complete(Try(true))
+                    context stop self
+                  }
+                  case _ => context.system.scheduler.scheduleOnce(config.statusTimeout, self, ex)
+                }
             }
-          }),
-          timeout.duration
-        )
+          }
+        })
+        checker ! Exec(Seq("riak-admin", "ring-status"))
+        Await.result(settled.future, timeout.duration)
 
+        // Run test
         Try(base.evaluate()) match {
           case Success(_) =>
           case Failure(ex) => log.error(ex.getMessage, ex)
         }
+
+        // Cleanup after
+        cleanup(baseName)
       }
     }
   }
