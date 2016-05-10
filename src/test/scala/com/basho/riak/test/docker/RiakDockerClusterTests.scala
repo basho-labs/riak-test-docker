@@ -1,6 +1,7 @@
 package com.basho.riak.test.docker
 
-import org.junit.{ClassRule, Rule, Test}
+import org.junit.{ClassRule, Test}
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration._
 
@@ -9,9 +10,12 @@ import scala.concurrent.duration._
   */
 class RiakDockerClusterTests {
 
-  @Test
-  def canCreateCluster() = {
+  val log = LoggerFactory.getLogger(classOf[RiakDockerClusterTests])
 
+  @Test
+  def canCreateCluster(): Unit = {
+    val hosts = RiakDockerClusterTests.cluster.containerHosts()
+    log.debug("hosts: {}", hosts.mkString(","))
   }
 
 }
@@ -19,6 +23,11 @@ class RiakDockerClusterTests {
 object RiakDockerClusterTests {
 
   @ClassRule
-  def cluster = DockerRiakCluster(RiakCluster(nodes = 3, timeout = 2 minutes, image = "basho/riak-ts"))
+  def cluster: DockerRiakCluster = new DockerRiakCluster(RiakCluster(
+    nodes = 3,
+    timeout = 3 minutes,
+    statusTimeout = 10 seconds,
+    image = "basho/riak-ts"
+  ))
 
 }

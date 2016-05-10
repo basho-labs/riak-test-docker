@@ -20,111 +20,147 @@ import scala.util.{Failure, Success, Try}
 /**
   * @author Jon Brisbin <jbrisbin@basho.com>
   */
-class DockerRiakCluster(config: RiakCluster) extends TestRule {
+class DockerRiakCluster(val config: RiakCluster,
+                        val docker: Docker = Docker()) extends TestRule {
 
-  val log = LoggerFactory.getLogger(classOf[DockerRiakCluster])
-  val charset = Charset.defaultCharset().toString
-  val docker = Docker()
+  private val log = LoggerFactory.getLogger(classOf[DockerRiakCluster])
+  private val charset = Charset.defaultCharset().toString
+  private val riakAddr = """|.*riak@([\W]+).*|""".r
 
   implicit val timeout: Timeout = Timeout(config.timeout)
 
-  import docker.system
   import docker.system.dispatcher
+  import docker.{materializer, system}
 
-  override def apply(base: Statement, description: Description): Statement = {
-    new Statement {
-      override def evaluate(): Unit = {
-        // Extract baseName from either passed-in name, methodName, or testClass name
-        val baseName = config.name match {
-          case Some(n) => n
-          case None => description.getMethodName match {
-            case null => description.getTestClass.getSimpleName
-            case m => m
-          }
-        }
-        // Get primaryNode name from config or baseName + '1'
-        val primaryNode = config.primaryNode match {
-          case Some(n) => n
-          case None => s"${baseName}1"
-        }
-
-        // Clean up existing containers
-        cleanup(baseName)
-
-        // Create and start the containers
-        var containers: mutable.Buffer[(ContainerInfo, ActorRef)] = mutable.Buffer()
-        for (i <- 1 to config.nodes) {
-          val name = s"$baseName$i"
-          val create = CreateContainer(
-            Name = name,
-            Hostname = Some(name),
-            Tty = true,
-            Image = config.image,
-            Env = Some(Seq(s"CLUSTER1=$primaryNode")),
-            Labels = Some(Map("baseName" -> baseName)),
-            HostConfig = Some(HostConfig(PublishAllPorts = true))
-          )
-          Await.result(for {
-            container <- docker.create(create)
-            containerActor <- docker.start(container.Id)
-            containerInfo <- docker.inspect(container.Id)
-          } yield {
-            containers += ((containerInfo, containerActor))
-          }, timeout.duration)
-        }
-        log.debug("containers: {}", containers)
-
-        // Wait for riak_kv to start in each container
-        containers
-          .foreach {
-            case (ci, ref) => {
-              Await.result(for {
-                stdout <- ref ? Exec(Seq("riak-admin", "wait-for-service", "riak_kv"))
-              } yield {
-                (stdout match {
-                  case bytes: ByteString => bytes.decodeString(charset).split("\n").filter(_.contains("riak_kv is up"))
-                }).foreach(line => {
-                  log.debug(line)
-                })
-              }, timeout.duration)
+  def containerHosts(): List[String] = {
+    Await.result(
+      for {
+        nodes <- docker
+          .containers(filters = Map("label" -> Seq("node=1")))
+        stdout <- docker
+          .exec(nodes.head.Id, Exec(Seq("riak-admin", "cluster", "status")))
+          .runFold(mutable.Buffer[String]()) {
+            case (buff, StdOut(bytes)) => {
+              val validNodes = bytes.decodeString(charset)
+                .split("\r\n")
+                .toList
+                .filter(_.contains("valid"))
+              log.debug("valid nodes: {}", validNodes)
+              buff ++ validNodes.map(line => {
+                line.split("\\|").toList match {
+                  case _ :: addr :: _ => addr.substring(addr.indexOf('@') + 1).trim
+                  case _ => "127.0.0.1"
+                }
+              })
             }
           }
+      } yield {
+        stdout
+      },
+      timeout.duration
+    ).toList
+  }
 
-        // Discover primaryNode IP
-        val primaryIpAddr = containers.find(_._1.Name.endsWith(primaryNode)) match {
-          case Some((ci, ref)) => ci.NetworkSettings.Networks match {
-            case Some(n) => n.values.head.IPAddress
-            case None => "127.0.0.1"
-          }
-          case _ => throw new IllegalStateException(s"No primaryNode configured and no container named ${baseName}1 found")
+  def stopRandomNode(): Unit = {
+
+  }
+
+  override def apply(base: Statement, description: Description): Statement = {
+    // Extract baseName from either passed-in name, methodName, or testClass name
+    val clusterName = config.name match {
+      case Some(n) => n
+      case None => description.getMethodName match {
+        case null => description.getTestClass.getSimpleName
+        case m => m
+      }
+    }
+    // Get primaryNode name from config or baseName + '1'
+    val primaryNode = config.primaryNode match {
+      case Some(n) => n
+      case None => s"${clusterName}1"
+    }
+
+    // Clean up existing containers
+    cleanup(clusterName)
+
+    // Create and start the containers
+    var containerMeta: mutable.Buffer[(ContainerInfo, ActorRef)] = mutable.Buffer()
+    for (i <- 1 to config.nodes) {
+      val name = s"$clusterName$i"
+      val create = CreateContainer(
+        Name = name,
+        Hostname = Some(name),
+        Tty = true,
+        Image = config.image,
+        Labels = Some(Map("baseName" -> clusterName, "node" -> i.toString)),
+        HostConfig = Some(HostConfig(PublishAllPorts = true))
+      )
+      Await.result(for {
+        container <- docker.create(create)
+        containerActor <- docker.start(container.Id)
+        containerInfo <- docker.inspect(container.Id)
+      } yield {
+        containerMeta += ((containerInfo, containerActor))
+      }, timeout.duration)
+    }
+    log.debug("containers: {}", containerMeta)
+
+    // Wait for riak_kv to start in each container
+    containerMeta
+      .foreach {
+        case (ci, ref) => {
+          Await.result(
+            for {
+              stdout <- ref ? Exec(Seq("riak-admin", "wait-for-service", "riak_kv"))
+            } yield {
+              (stdout match {
+                case bytes: ByteString => bytes.decodeString(charset).split("\n").filter(_.contains("riak_kv is up"))
+              }).foreach(line => {
+                log.debug(line)
+              })
+            },
+            timeout.duration
+          )
         }
+      }
 
-        // Join nodes to cluster
-        containers
-          .filter {
-            case (ci, ref) => !ci.Name.endsWith(primaryNode)
-          }
-          .foreach {
-            case (ci, ref) => Await.result(
-              for {
-                join <- ref ? Exec(Seq("riak-admin", "cluster", "join", s"riak@$primaryIpAddr"))
-                plan <- ref ? Exec(Seq("riak-admin", "cluster", "plan"))
-                commit <- ref ? Exec(Seq("riak-admin", "cluster", "commit"))
-                status <- ref ? Exec(Seq("riak-admin", "ring-status"))
-              } yield {
-                status match {
-                  case bytes: ByteString => log.debug(bytes.decodeString(charset))
-                }
-              },
-              timeout.duration
-            )
-          }
+    // Discover primaryNode IP
+    val primaryIpAddr = containerMeta.find(_._1.Name.endsWith(primaryNode)) match {
+      case Some((ci, ref)) => ci.NetworkSettings.Networks match {
+        case Some(n) => n.values.head.IPAddress
+        case None => "127.0.0.1"
+      }
+      case _ => throw new IllegalStateException(s"No primaryNode configured and no container named ${clusterName}1 found")
+    }
 
+    // Join nodes to cluster
+    containerMeta
+      .filter {
+        case (ci, ref) => !ci.Name.endsWith(primaryNode)
+      }
+      .foreach {
+        case (ci, ref) => Await.result(
+          for {
+            join <- ref ? Exec(Seq("riak-admin", "cluster", "join", s"riak@$primaryIpAddr"))
+            plan <- ref ? Exec(Seq("riak-admin", "cluster", "plan"))
+            commit <- ref ? Exec(Seq("riak-admin", "cluster", "commit"))
+            status <- ref ? Exec(Seq("riak-admin", "ring-status"))
+          } yield {
+            status match {
+              case bytes: ByteString => log.debug(bytes.decodeString(charset))
+            }
+          },
+          timeout.duration
+        )
+      }
+
+    new Statement {
+      override def evaluate(): Unit = {
         // Wait for cluster to settle
         val settled = Promise[Boolean]()
         val checker = actor(new Act {
           become {
-            case ex: Exec => (containers.head._2 ? ex) onSuccess {
+            case ex: Exec => (containerMeta.head._2 ? ex) onSuccess {
               case bytes: ByteString =>
                 bytes.decodeString(charset).split("\n").count(_.contains("Waiting on:")) match {
                   case 0 => {
@@ -146,7 +182,7 @@ class DockerRiakCluster(config: RiakCluster) extends TestRule {
         }
 
         // Cleanup after
-        cleanup(baseName)
+        cleanup(clusterName)
       }
     }
   }
@@ -165,8 +201,3 @@ class DockerRiakCluster(config: RiakCluster) extends TestRule {
 
 }
 
-object DockerRiakCluster {
-  def apply(): DockerRiakCluster = DockerRiakCluster(RiakCluster())
-
-  def apply(config: RiakCluster): DockerRiakCluster = new DockerRiakCluster(config)
-}
