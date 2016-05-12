@@ -25,7 +25,6 @@ class DockerRiakCluster(val config: RiakCluster,
 
   private val log = LoggerFactory.getLogger(classOf[DockerRiakCluster])
   private val charset = Charset.defaultCharset().toString
-  private val riakAddr = """|.*riak@([\W]+).*|""".r
 
   implicit val timeout: Timeout = Timeout(config.timeout)
 
@@ -45,13 +44,14 @@ class DockerRiakCluster(val config: RiakCluster,
                 .split("\r\n")
                 .toList
                 .filter(_.contains("valid"))
+                .map(line => {
+                  line.split("\\|").toList match {
+                    case _ :: addr :: _ => addr.substring(addr.indexOf('@') + 1).trim
+                    case _ => "127.0.0.1"
+                  }
+                })
               log.debug("valid nodes: {}", validNodes)
-              buff ++ validNodes.map(line => {
-                line.split("\\|").toList match {
-                  case _ :: addr :: _ => addr.substring(addr.indexOf('@') + 1).trim
-                  case _ => "127.0.0.1"
-                }
-              })
+              buff ++ validNodes
             }
           }
       } yield {
@@ -199,5 +199,11 @@ class DockerRiakCluster(val config: RiakCluster,
     )
   }
 
+}
+
+object DockerRiakCluster {
+  def apply(): DockerRiakCluster = DockerRiakCluster(RiakCluster())
+
+  def apply(config: RiakCluster): DockerRiakCluster = new DockerRiakCluster(config)
 }
 
