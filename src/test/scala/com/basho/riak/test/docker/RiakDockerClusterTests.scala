@@ -23,7 +23,7 @@ class RiakDockerClusterTests {
 object RiakDockerClusterTests {
 
   @ClassRule
-  def cluster: DockerRiakCluster = new DockerRiakCluster(RiakCluster(
+  def cluster: DockerRiakCluster = DockerRiakCluster(RiakCluster(
     nodes = 3,
     timeout = 3 minutes,
     statusTimeout = 10 seconds,
