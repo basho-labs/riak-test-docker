@@ -3,8 +3,9 @@ package com.basho.riak.test.docker
 import java.nio.charset.Charset
 
 import akka.actor.ActorDSL._
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
+import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
 import akka.util.{ByteString, Timeout}
 import com.jbrisbin.docker._
@@ -20,22 +21,21 @@ import scala.util.{Failure, Success, Try}
 /**
   * @author Jon Brisbin <jbrisbin@basho.com>
   */
-class DockerRiakCluster(val config: RiakCluster,
-                        val docker: Docker = Docker()) extends TestRule {
+class DockerRiakCluster(config: RiakCluster, docker: Docker) extends TestRule {
 
   private val log = LoggerFactory.getLogger(classOf[DockerRiakCluster])
   private val charset = Charset.defaultCharset().toString
 
+  implicit val system = ActorSystem("riak-test-docker")
+  implicit val materializer = ActorMaterializer()
   implicit val timeout: Timeout = Timeout(config.timeout)
 
   import docker.system.dispatcher
-  import docker.{materializer, system}
 
   def containerHosts(): List[String] = {
     Await.result(
       for {
-        nodes <- docker
-          .containers(filters = Map("label" -> Seq("node=1")))
+        nodes <- docker.containers(filters = Map("label" -> Seq("node=1")))
         stdout <- docker
           .exec(nodes.head.Id, Exec(Seq("riak-admin", "cluster", "status")))
           .runFold(mutable.Buffer[String]()) {
@@ -106,23 +106,14 @@ class DockerRiakCluster(val config: RiakCluster,
     log.debug("containers: {}", containerMeta)
 
     // Wait for riak_kv to start in each container
-    containerMeta
-      .foreach {
-        case (ci, ref) => {
-          Await.result(
-            for {
-              stdout <- ref ? Exec(Seq("riak-admin", "wait-for-service", "riak_kv"))
-            } yield {
-              (stdout match {
-                case bytes: ByteString => bytes.decodeString(charset).split("\n").filter(_.contains("riak_kv is up"))
-              }).foreach(line => {
-                log.debug(line)
-              })
-            },
-            timeout.duration
-          )
-        }
+    containerMeta foreach {
+      case (ci, ref) => {
+        Await.result(
+          ref ? Exec(Seq("riak-admin", "wait-for-service", "riak_kv")),
+          timeout.duration
+        )
       }
+    }
 
     // Discover primaryNode IP
     val primaryIpAddr = containerMeta.find(_._1.Name.endsWith(primaryNode)) match {
@@ -202,8 +193,15 @@ class DockerRiakCluster(val config: RiakCluster,
 }
 
 object DockerRiakCluster {
+
+  implicit val system = ActorSystem("tests")
+  implicit val materializer = ActorMaterializer()
+
+  import system.dispatcher
+
   def apply(): DockerRiakCluster = DockerRiakCluster(RiakCluster())
 
-  def apply(config: RiakCluster): DockerRiakCluster = new DockerRiakCluster(config)
+  def apply(config: RiakCluster): DockerRiakCluster = new DockerRiakCluster(config, Docker())
+
 }
 
