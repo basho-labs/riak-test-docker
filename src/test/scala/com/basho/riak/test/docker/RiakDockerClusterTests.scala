@@ -18,6 +18,11 @@ class RiakDockerClusterTests {
     log.debug("hosts: {}", hosts.mkString(","))
   }
 
+  @Test
+  def canTestClusterAlive():Unit = {
+
+  }
+
 }
 
 object RiakDockerClusterTests {
