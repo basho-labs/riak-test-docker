@@ -1,6 +1,7 @@
 package com.basho.riak.test.docker
 
 import java.nio.charset.Charset
+import java.util.UUID
 
 import akka.actor.ActorDSL._
 import akka.actor.{ActorRef, ActorSystem}
@@ -21,48 +22,33 @@ import scala.util.{Failure, Success, Try}
 /**
   * @author Jon Brisbin <jbrisbin@basho.com>
   */
-class DockerRiakCluster(config: RiakCluster, docker: Docker) extends TestRule {
+class DockerRiakCluster(config: RiakCluster, docker: Docker, clusterId: String)
+                       (implicit val system: ActorSystem,
+                        implicit val materializer: ActorMaterializer) extends TestRule {
 
   private val log = LoggerFactory.getLogger(classOf[DockerRiakCluster])
   private val charset = Charset.defaultCharset().toString
 
-  implicit val system = ActorSystem("riak-test-docker")
-  implicit val materializer = ActorMaterializer()
   implicit val timeout: Timeout = Timeout(config.timeout)
 
-  import docker.system.dispatcher
+  import system.dispatcher
 
   def containerHosts(): List[String] = {
-    Await.result(
-      for {
-        nodes <- docker.containers(filters = Map("label" -> Seq("node=1")))
-        stdout <- docker
-          .exec(nodes.head.Id, Exec(Seq("riak-admin", "cluster", "status")))
-          .runFold(mutable.Buffer[String]()) {
-            case (buff, StdOut(bytes)) => {
-              val validNodes = bytes.decodeString(charset)
-                .split("\r\n")
-                .toList
-                .filter(_.contains("valid"))
-                .map(line => {
-                  line.split("\\|").toList match {
-                    case _ :: addr :: _ => addr.substring(addr.indexOf('@') + 1).trim
-                    case _ => "127.0.0.1"
-                  }
-                })
-              log.debug("valid nodes: {}", validNodes)
-              buff ++ validNodes
-            }
+    Await.result(for {
+      nodes <- docker.containers(filters = Map("label" -> Seq(s"clusterId=$clusterId", "node=1")))
+      stdout <- docker.exec(nodes.head.Id, Exec(Seq("riak-admin", "cluster", "status")))
+        .runFold(mutable.Buffer[String]()) {
+          case (buff, StdOut(bytes)) => {
+            val validNodes = bytes.decodeString(charset).split("\r\n").toList.filter(_.contains("valid"))
+              .map(_.split("\\|").toList match {
+                case _ :: addr :: _ => addr.substring(addr.indexOf('@') + 1).trim
+                case _ => "127.0.0.1"
+              })
+            log.debug("valid nodes: {}", validNodes)
+            buff ++ validNodes
           }
-      } yield {
-        stdout
-      },
-      timeout.duration
-    ).toList
-  }
-
-  def stopRandomNode(): Unit = {
-
+        }
+    } yield stdout.toList, timeout.duration)
   }
 
   override def apply(base: Statement, description: Description): Statement = {
@@ -92,27 +78,20 @@ class DockerRiakCluster(config: RiakCluster, docker: Docker) extends TestRule {
         Hostname = Some(name),
         Tty = true,
         Image = config.image,
-        Labels = Some(Map("baseName" -> clusterName, "node" -> i.toString)),
+        Labels = Some(Map("baseName" -> clusterName, "node" -> i.toString, "clusterId" -> clusterId)),
         HostConfig = Some(HostConfig(PublishAllPorts = true))
       )
       Await.result(for {
         container <- docker.create(create)
         containerActor <- docker.start(container.Id)
         containerInfo <- docker.inspect(container.Id)
-      } yield {
-        containerMeta += ((containerInfo, containerActor))
-      }, timeout.duration)
+      } yield containerMeta += ((containerInfo, containerActor)), timeout.duration)
     }
     log.debug("containers: {}", containerMeta)
 
     // Wait for riak_kv to start in each container
     containerMeta foreach {
-      case (ci, ref) => {
-        Await.result(
-          ref ? Exec(Seq("riak-admin", "wait-for-service", "riak_kv")),
-          timeout.duration
-        )
-      }
+      case (ci, ref) => Await.result(ref ? Exec(Seq("riak-admin", "wait-for-service", "riak_kv")), timeout.duration)
     }
 
     // Discover primaryNode IP
@@ -126,23 +105,18 @@ class DockerRiakCluster(config: RiakCluster, docker: Docker) extends TestRule {
 
     // Join nodes to cluster
     containerMeta
-      .filter {
-        case (ci, ref) => !ci.Name.endsWith(primaryNode)
-      }
+      .filter(_._1.Name.endsWith(primaryNode))
       .foreach {
-        case (ci, ref) => Await.result(
-          for {
+        case (ci, ref) =>
+          Await.result(for {
             join <- ref ? Exec(Seq("riak-admin", "cluster", "join", s"riak@$primaryIpAddr"))
             plan <- ref ? Exec(Seq("riak-admin", "cluster", "plan"))
             commit <- ref ? Exec(Seq("riak-admin", "cluster", "commit"))
-            status <- ref ? Exec(Seq("riak-admin", "ring-status"))
           } yield {
-            status match {
+            Seq(join, plan, commit) foreach {
               case bytes: ByteString => log.debug(bytes.decodeString(charset))
             }
-          },
-          timeout.duration
-        )
+          }, timeout.duration)
       }
 
     new Statement {
@@ -185,23 +159,23 @@ class DockerRiakCluster(config: RiakCluster, docker: Docker) extends TestRule {
         .flatMap {
           case l if l.nonEmpty => docker.remove(Source(l), force = true)
           case _ => Future.successful(true)
-        },
-      timeout.duration
-    )
+        }, timeout.duration)
   }
 
 }
 
 object DockerRiakCluster {
 
-  implicit val system = ActorSystem("tests")
+  implicit val system = ActorSystem("riak-test-docker")
   implicit val materializer = ActorMaterializer()
 
   import system.dispatcher
 
+  val clusterId = UUID.randomUUID().toString
+
   def apply(): DockerRiakCluster = DockerRiakCluster(RiakCluster())
 
-  def apply(config: RiakCluster): DockerRiakCluster = new DockerRiakCluster(config, Docker())
+  def apply(config: RiakCluster): DockerRiakCluster = new DockerRiakCluster(config, Docker(), clusterId)
 
 }
 
