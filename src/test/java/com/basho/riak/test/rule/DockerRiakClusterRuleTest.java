@@ -21,7 +21,10 @@ public class DockerRiakClusterRuleTest {
 
     @Rule
     public DockerRiakClusterRule riakCluster = new DockerRiakClusterRule(
-            new DockerRiakCluster(getClass().getSimpleName(), NODES, 3));
+            DockerRiakCluster.builder()
+                    .withClusterName(getClass().getSimpleName())
+                    .withNodes(NODES)
+                    .withTimeout(3));
 
     @Test
     public void testCluster() throws ExecutionException, InterruptedException, UnknownHostException {

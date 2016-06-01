@@ -9,28 +9,33 @@ import java.util.Set;
 
 public class DockerRiakClusterRule implements TestRule {
 
-    private DockerRiakCluster dockerRiakCluster;
+    private DockerRiakCluster.Builder builder;
+    private ThreadLocal<DockerRiakCluster> clusterHolder = new ThreadLocal<>();
 
-    public DockerRiakClusterRule(DockerRiakCluster dockerRiakCluster) {
-        this.dockerRiakCluster = dockerRiakCluster;
+    public DockerRiakClusterRule(DockerRiakCluster.Builder builder) {
+        this.builder = builder;
     }
 
     @Override
     public Statement apply(Statement statement, Description description) {
+        DockerRiakCluster cluster = builder
+                .withClusterName(description.getTestClass().getSimpleName())
+                .build();
+        clusterHolder.set(cluster);
         return new Statement() {
             @Override
             public void evaluate() throws Throwable {
                 try {
-                    dockerRiakCluster.start();
+                    cluster.start();
                     statement.evaluate();
                 } finally {
-                    dockerRiakCluster.stop();
+                    cluster.stop();
                 }
             }
         };
     }
 
     public Set<String> getIps() {
-        return dockerRiakCluster.getIps();
+        return clusterHolder.get().getIps();
     }
 }
