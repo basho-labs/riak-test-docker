@@ -69,6 +69,11 @@ public class DockerRiakUtils {
         }
     }
 
+    public static void createBuketType(DockerClient dockerClient, String containerId, String bucketType, String props) {
+        dockerExec(dockerClient, containerId, new String[]{"riak-admin", "bucket-type", "create", bucketType, String.format("{\"props\":%s}", props)});
+        dockerExec(dockerClient, containerId, new String[]{"riak-admin", "bucket-type", "activate", bucketType});
+    }
+
     public static String dockerExec(DockerClient dockerClient, String containerId, String[] cmd) {
         try {
             String riakAdmin = dockerClient.execCreate(containerId, cmd,

@@ -60,22 +60,37 @@ public class DockerRiakCluster {
      * @param timeUnit    unit of granularity
      */
     public DockerRiakCluster(String clusterName, int nodes, String imageName, long timeout, TimeUnit timeUnit) {
-        this.ipMap = Collections.synchronizedMap(new LinkedHashMap<>(nodes));
-        this.joinedNodes = new AtomicInteger(0);
-        this.properties = new ClusterProperties();
+        this(new ClusterProperties(){{
+            setClusterName(clusterName);
+            setNodes(nodes);
+            setTimeout(timeout);
+            setImageName(imageName);
+            setTimeUnit(timeUnit);
+        }});
+    }
 
-        this.properties.clusterName = clusterName;
-        this.properties.nodes = nodes;
-        this.properties.timeUnit = timeUnit;
-        this.properties.timeout = StringUtils.isNotBlank(ENV_DOCKER_TIMEOUT)
-                ? Long.parseLong(ENV_DOCKER_TIMEOUT)
-                : timeout;
-        this.properties.imageName = StringUtils.isBlank(ENV_DOCKER_IMAGE)
-                ? StringUtils.isNotBlank(imageName) ? imageName : DEFAULT_DOCKER_IMAGE
-                : ENV_DOCKER_IMAGE;
+    /**
+     * Creates new instance of DockerRiakCluster
+     *
+     * @param properties set of configurations for this cluster
+     */
+    public DockerRiakCluster(ClusterProperties properties) {
+        this.properties = properties;
+        this.ipMap = Collections.synchronizedMap(new LinkedHashMap<>(properties.getNodes()));
+        this.joinedNodes = new AtomicInteger(0);
+
+        if (StringUtils.isNotBlank(ENV_DOCKER_TIMEOUT)) {
+            this.properties.setTimeout(Long.parseLong(ENV_DOCKER_TIMEOUT));
+        }
+
+        if (StringUtils.isNotBlank(ENV_DOCKER_IMAGE)) {
+            this.properties.setImageName(ENV_DOCKER_IMAGE);
+        } else if (StringUtils.isBlank(properties.getImageName())) {
+            this.properties.setImageName(DEFAULT_DOCKER_IMAGE);
+        }
 
         try {
-            this.dockerClient = Optional.ofNullable(properties.dockerClientBuilder)
+            this.dockerClient = Optional.ofNullable(properties.getDockerClientBuilder())
                     .orElse(DefaultDockerClient.fromEnv()).build();
         } catch (DockerCertificateException e) {
             throw new RuntimeException(e.getMessage(), e);
@@ -83,20 +98,20 @@ public class DockerRiakCluster {
     }
 
     public void start() {
-        if (properties.nodes <= 0) {
+        if (properties.getNodes() <= 0) {
             throw new IllegalStateException("Nodes count must be grater than 0");
         }
-        logger.debug("Cluster '{}' is starting...", properties.clusterName);
+        logger.debug("Cluster '{}' is starting...", properties.getClusterName());
 
-        CountDownLatch clusterStartLatch = new CountDownLatch(properties.nodes);
-        List<Thread> threads = IntStream.range(0, properties.nodes).mapToObj(i -> new Thread(() -> {
-            startNode(properties.clusterName, properties.clusterName + i, properties.imageName);
+        CountDownLatch clusterStartLatch = new CountDownLatch(properties.getNodes());
+        List<Thread> threads = IntStream.range(0, properties.getNodes()).mapToObj(i -> new Thread(() -> {
+            startNode(properties.getClusterName(), properties.getClusterName() + i, properties.getImageName());
             clusterStartLatch.countDown();
         })).collect(Collectors.toList());
         threads.forEach(Thread::start);
 
         try {
-            if (!clusterStartLatch.await(properties.timeout, properties.timeUnit)) {
+            if (!clusterStartLatch.await(properties.getTimeout(), properties.getTimeUnit())) {
                 threads.forEach(Thread::interrupt);
                 stop(); // stop all started containers
                 throw new IllegalStateException("The timeout period elapsed prior to Riak cluster start completion");
@@ -104,18 +119,28 @@ public class DockerRiakCluster {
         } catch (Exception e) {
             throw new RuntimeException(e.getMessage(), e);
         }
-        logger.info("Cluster '{}' is ready ({} node(s)).", properties.clusterName, joinedNodes);
+        createBucketTypes(dockerClient, ipMap.keySet().iterator().next());
+        logger.info("Cluster '{}' is ready ({} node(s)).", properties.getClusterName(), joinedNodes);
     }
 
     public void stop() {
         ipMap.keySet().forEach(c -> DockerRiakUtils.deleteNode(dockerClient, c));
-        logger.info("Cluster '{}' is stopped ({} node(s)).", properties.clusterName, ipMap.size());
+        logger.info("Cluster '{}' is stopped ({} node(s)).", properties.getClusterName(), ipMap.size());
 
         ipMap.clear();
     }
 
     public Set<String> getIps() {
         return new HashSet<>(ipMap.values());
+    }
+
+    private void createBucketTypes(DockerClient dockerClient, String containerId) {
+        properties.getBucketTypes().forEach((t, p) -> {
+            String props = p.entrySet().stream()
+                    .map(e -> String.format("\"%s\":\"%s\"", e.getKey(), e.getValue()))
+                    .collect(Collectors.joining(","));
+            DockerRiakUtils.createBuketType(dockerClient, containerId, t, "{" + props + "}");
+        });
     }
 
     private void startNode(String clusterName, String nodeName, String imageName) {
@@ -137,7 +162,7 @@ public class DockerRiakCluster {
                 DockerRiakUtils.joinNode(dockerClient, containerId, ip);
                 logger.info("Node '{}({})' was joined to '{}'", nodeName, networkSettings.ipAddress(), ip);
 
-                if (joinedNodes.addAndGet(1) == properties.nodes) {
+                if (joinedNodes.addAndGet(1) == properties.getNodes()) {
                     // all Riak nodes are joined and we need to wait until ring is ready
                     logger.debug("Cluster plan is ready. {} nodes joined. Applying changes...", joinedNodes.get());
                     DockerRiakUtils.commitClusterPlan(dockerClient, containerId);
@@ -150,20 +175,11 @@ public class DockerRiakCluster {
 
     @SuppressWarnings("unused")
     public void setDockerClientBuilder(DefaultDockerClient.Builder dockerClientBuilder) {
-        this.properties.dockerClientBuilder = dockerClientBuilder;
+        this.properties.setDockerClientBuilder(dockerClientBuilder);
     }
 
     public static Builder builder() {
         return new Builder();
-    }
-
-    private static class ClusterProperties {
-        private long timeout;
-        private TimeUnit timeUnit = TimeUnit.MINUTES;
-        private int nodes;
-        private String imageName;
-        private String clusterName;
-        private DefaultDockerClient.Builder dockerClientBuilder;
     }
 
     @SuppressWarnings("unused")
@@ -172,42 +188,42 @@ public class DockerRiakCluster {
         private ClusterProperties properties = new ClusterProperties();
 
         public Builder withTimeout(long timeout) {
-            this.properties.timeout = timeout;
+            properties.setTimeout(timeout);
             return this;
         }
 
         public Builder withTimeUnit(TimeUnit timeUnit) {
-            this.properties.timeUnit = timeUnit;
+            properties.setTimeUnit(timeUnit);
             return this;
         }
 
         public Builder withNodes(int nodes) {
-            this.properties.nodes = nodes;
+            properties.setNodes(nodes);
             return this;
         }
 
         public Builder withImageName(String imageName) {
-            this.properties.imageName = imageName;
+            properties.setImageName(imageName);
             return this;
         }
 
         public Builder withClusterName(String clusterName) {
-            this.properties.clusterName = clusterName;
+            properties.setClusterName(clusterName);
             return this;
         }
 
         public Builder withDockerClientBuilder(DefaultDockerClient.Builder builder) {
-            this.properties.dockerClientBuilder = builder;
+            properties.setDockerClientBuilder(builder);
+            return this;
+        }
+
+        public Builder withBucketType(String bucketType, Map<String, String> props) {
+            this.properties.getBucketTypes().put(bucketType, props);
             return this;
         }
 
         public DockerRiakCluster build() {
-            return new DockerRiakCluster(
-                    properties.clusterName,
-                    properties.nodes,
-                    properties.imageName,
-                    properties.timeout,
-                    properties.timeUnit);
+            return new DockerRiakCluster(properties);
         }
     }
 }
