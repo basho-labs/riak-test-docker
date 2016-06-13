@@ -3,6 +3,7 @@ package com.basho.riak.test.cluster;
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.exceptions.DockerCertificateException;
+import com.spotify.docker.client.exceptions.DockerException;
 import com.spotify.docker.client.messages.NetworkSettings;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -19,7 +20,7 @@ public class DockerRiakCluster {
 
     private static final Logger logger = LoggerFactory.getLogger(DockerRiakCluster.class);
 
-    private static final String DEFAULT_DOCKER_IMAGE = "basho/riak-ts:1.3.0";
+    private static final String DEFAULT_DOCKER_IMAGE = "basho/riak-ts";
 
     private static final String ENV_DOCKER_IMAGE = System.getProperty("com.basho.riak.test.cluster.image-name");
     private static final String ENV_DOCKER_TIMEOUT = System.getProperty("com.basho.riak.test.cluster.timeout");
@@ -101,6 +102,8 @@ public class DockerRiakCluster {
         if (properties.getNodes() <= 0) {
             throw new IllegalStateException("Nodes count must be grater than 0");
         }
+        pullDockerImage(properties.getImageName());
+
         logger.debug("Cluster '{}' is starting...", properties.getClusterName());
 
         CountDownLatch clusterStartLatch = new CountDownLatch(properties.getNodes());
@@ -132,6 +135,27 @@ public class DockerRiakCluster {
 
     public Set<String> getIps() {
         return new HashSet<>(ipMap.values());
+    }
+
+    private void pullDockerImage(String name) {
+        // add :latest suffix if no tag provided
+        String taggedName = name.contains(":") ? name : name + ":latest";
+
+        logger.debug("Verifying Docker image '{}'...", taggedName);
+        try {
+            if (dockerClient.listImages(DockerClient.ListImagesParam.byName(taggedName)).stream()
+                    .noneMatch(i -> i.repoTags().contains(taggedName))) {
+
+                // pull docker image if there is no such image locally
+                logger.debug("Docker image '{}' will be pulled from DockerHub", taggedName);
+                dockerClient.pull(properties.getImageName());
+                logger.info("Docker image '{}' was pulled from DockerHub", taggedName);
+            } else {
+                logger.debug("Docker image '{}' is already present. Pulling skipped", taggedName);
+            }
+        } catch (DockerException | InterruptedException e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
     }
 
     private void createBucketTypes(DockerClient dockerClient, String containerId) {

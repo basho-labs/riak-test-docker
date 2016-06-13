@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class ClusterProperties {
-    private long timeout;
+    private long timeout = 1;
     private TimeUnit timeUnit = TimeUnit.MINUTES;
     private int nodes;
     private String imageName;
