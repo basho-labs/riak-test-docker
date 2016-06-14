@@ -61,7 +61,7 @@ public class DockerRiakCluster {
      * @param timeUnit    unit of granularity
      */
     public DockerRiakCluster(String clusterName, int nodes, String imageName, long timeout, TimeUnit timeUnit) {
-        this(new ClusterProperties(){{
+        this(new ClusterProperties() {{
             setClusterName(clusterName);
             setNodes(nodes);
             setTimeout(timeout);
@@ -90,6 +90,11 @@ public class DockerRiakCluster {
             this.properties.setImageName(DEFAULT_DOCKER_IMAGE);
         }
 
+        if (StringUtils.isBlank(properties.getClusterName())) {
+            logger.info("Cluster name is not provided. Random UUID will be using instead.");
+            this.properties.setClusterName(UUID.randomUUID().toString());
+        }
+
         try {
             this.dockerClient = Optional.ofNullable(properties.getDockerClientBuilder())
                     .orElse(DefaultDockerClient.fromEnv()).build();
@@ -108,7 +113,7 @@ public class DockerRiakCluster {
 
         CountDownLatch clusterStartLatch = new CountDownLatch(properties.getNodes());
         List<Thread> threads = IntStream.range(0, properties.getNodes()).mapToObj(i -> new Thread(() -> {
-            startNode(properties.getClusterName(), properties.getClusterName() + i, properties.getImageName());
+            startNode(properties.getClusterName(), properties.getClusterName() + "-" + i, properties.getImageName());
             clusterStartLatch.countDown();
         })).collect(Collectors.toList());
         threads.forEach(Thread::start);
@@ -209,7 +214,15 @@ public class DockerRiakCluster {
     @SuppressWarnings("unused")
     public static final class Builder {
 
-        private ClusterProperties properties = new ClusterProperties();
+        private final ClusterProperties properties;
+
+        public Builder() {
+            this.properties = new ClusterProperties();
+        }
+
+        public Builder(Builder builder) {
+            this.properties = new ClusterProperties(builder.properties);
+        }
 
         public Builder withTimeout(long timeout) {
             properties.setTimeout(timeout);

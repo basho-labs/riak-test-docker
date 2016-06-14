@@ -3,8 +3,8 @@ package com.basho.riak.test.cluster;
 import com.basho.riak.client.api.RiakClient;
 import com.basho.riak.client.api.commands.buckets.ListBuckets;
 import com.basho.riak.client.api.commands.kv.CoveragePlan;
-import com.basho.riak.client.core.query.Namespace;
 import com.basho.riak.client.core.util.HostAndPort;
+import com.basho.riak.test.RiakTestUtils;
 import org.junit.Test;
 
 import java.net.UnknownHostException;
@@ -19,37 +19,26 @@ import static org.junit.Assert.assertNotNull;
 public class DockerRiakClusterTest {
 
     @Test
-    public void testCluster() throws UnknownHostException, ExecutionException, InterruptedException {
+    public void testCluster() {
         final int nodes = 3;
-        DockerRiakCluster riakCluster = null;
-        RiakClient client = null;
+        DockerRiakCluster riakCluster = new DockerRiakCluster(getClass().getSimpleName(), nodes, 3);
         try {
-            riakCluster = new DockerRiakCluster(getClass().getSimpleName(), nodes, 3);
             riakCluster.start();
             assertEquals(nodes, riakCluster.getIps().size());
 
-            client = RiakClient.newClient(String.join(",", riakCluster.getIps()));
-            final CoveragePlan cmd = CoveragePlan.Builder.create(new Namespace("default")).build();
-            final CoveragePlan.Response response = client.execute(cmd);
+            final CoveragePlan.Response response = RiakTestUtils
+                    .receiveCoveragePlan(String.join(",", riakCluster.getIps()));
             assertEquals(nodes, response.hosts().size());
             assertEquals(riakCluster.getIps(),
                     response.hosts().stream().map(HostAndPort::getHost).collect(Collectors.toSet()));
         } finally {
-            Optional.ofNullable(riakCluster).ifPresent(DockerRiakCluster::stop);
-            Optional.ofNullable(client).ifPresent(c -> {
-                try {
-                    c.shutdown().get();
-                } catch (Throwable e) {
-                    // ignore
-                }
-            });
+            riakCluster.stop();
         }
     }
 
     @Test
     public void testClusterWithBucketTypes() throws UnknownHostException, ExecutionException, InterruptedException {
         DockerRiakCluster riakCluster = DockerRiakCluster.builder()
-                .withClusterName(getClass().getSimpleName())
                 .withNodes(1)
                 .withTimeout(1)
                 .withBucketType("plain", Collections.emptyMap())

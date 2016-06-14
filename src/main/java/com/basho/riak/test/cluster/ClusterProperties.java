@@ -5,18 +5,30 @@ import com.spotify.docker.client.DefaultDockerClient;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class ClusterProperties {
     private long timeout = 1;
     private TimeUnit timeUnit = TimeUnit.MINUTES;
-    private int nodes;
+    private int nodes = 1;
     private String imageName;
     private String clusterName;
     private DefaultDockerClient.Builder dockerClientBuilder;
     private Map<String, Map<String, String>> bucketTypes;
 
-    ClusterProperties() {
+    public ClusterProperties() {
         this.bucketTypes = new HashMap<>();
+    }
+
+    public ClusterProperties(ClusterProperties properties) {
+        this.timeout = properties.timeout;
+        this.timeUnit = properties.timeUnit;
+        this.nodes = properties.nodes;
+        this.imageName = properties.imageName;
+        this.clusterName = properties.clusterName;
+        this.dockerClientBuilder = properties.dockerClientBuilder;
+        this.bucketTypes = properties.getBucketTypes().entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> new HashMap<>(e.getValue())));
     }
 
     public long getTimeout() {
