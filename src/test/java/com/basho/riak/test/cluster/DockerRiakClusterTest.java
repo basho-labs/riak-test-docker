@@ -21,7 +21,7 @@ public class DockerRiakClusterTest {
     @Test
     public void testCluster() {
         final int nodes = 3;
-        DockerRiakCluster riakCluster = new DockerRiakCluster(getClass().getSimpleName(), nodes, 3);
+        DockerRiakCluster riakCluster = new DockerRiakCluster(nodes, 3);
         try {
             riakCluster.start();
             assertEquals(nodes, riakCluster.getIps().size());

@@ -15,7 +15,7 @@ public class DockerRiakClusterRule implements TestRule {
     private ThreadLocal<DockerRiakCluster> clusterHolder = new ThreadLocal<>();
 
     public DockerRiakClusterRule(DockerRiakCluster.Builder builder) {
-        this.builder = builder.withClusterName(null); // ignore cluster name to avoid containers with identical names;
+        this.builder = builder;
     }
 
     @Override

@@ -28,6 +28,7 @@ public class DockerRiakCluster {
     private final DockerClient dockerClient;
     private final Map<String, String> ipMap; // Map<id, ip>
     private final AtomicInteger joinedNodes;
+    private final String clusterName;
     private final ClusterProperties properties;
 
     /**
@@ -36,8 +37,8 @@ public class DockerRiakCluster {
      * @param nodes   a number of cluster nodes
      * @param timeout cluster startup timeout in <b>minutes</b>
      */
-    public DockerRiakCluster(String clusterName, int nodes, long timeout) {
-        this(clusterName, nodes, timeout, TimeUnit.MINUTES);
+    public DockerRiakCluster(int nodes, long timeout) {
+        this(nodes, timeout, TimeUnit.MINUTES);
     }
 
     /**
@@ -47,22 +48,20 @@ public class DockerRiakCluster {
      * @param timeout  cluster startup timeout
      * @param timeUnit unit of granularity
      */
-    public DockerRiakCluster(String clusterName, int nodes, long timeout, TimeUnit timeUnit) {
-        this(clusterName, nodes, null, timeout, timeUnit);
+    public DockerRiakCluster(int nodes, long timeout, TimeUnit timeUnit) {
+        this(nodes, null, timeout, timeUnit);
     }
 
     /**
      * Creates new instance of DockerRiakCluster
      *
-     * @param clusterName a name of this cluster
      * @param nodes       a number of cluster nodes
      * @param imageName   name of Docker image for building cluster
      * @param timeout     cluster startup timeout
      * @param timeUnit    unit of granularity
      */
-    public DockerRiakCluster(String clusterName, int nodes, String imageName, long timeout, TimeUnit timeUnit) {
+    public DockerRiakCluster(int nodes, String imageName, long timeout, TimeUnit timeUnit) {
         this(new ClusterProperties() {{
-            setClusterName(clusterName);
             setNodes(nodes);
             setTimeout(timeout);
             setImageName(imageName);
@@ -79,6 +78,7 @@ public class DockerRiakCluster {
         this.properties = properties;
         this.ipMap = Collections.synchronizedMap(new LinkedHashMap<>(properties.getNodes()));
         this.joinedNodes = new AtomicInteger(0);
+        this.clusterName = UUID.randomUUID().toString();
 
         if (StringUtils.isNotBlank(ENV_DOCKER_TIMEOUT)) {
             this.properties.setTimeout(Long.parseLong(ENV_DOCKER_TIMEOUT));
@@ -88,11 +88,6 @@ public class DockerRiakCluster {
             this.properties.setImageName(ENV_DOCKER_IMAGE);
         } else if (StringUtils.isBlank(properties.getImageName())) {
             this.properties.setImageName(DEFAULT_DOCKER_IMAGE);
-        }
-
-        if (StringUtils.isBlank(properties.getClusterName())) {
-            logger.info("Cluster name is not provided. Random UUID will be using instead.");
-            this.properties.setClusterName(UUID.randomUUID().toString());
         }
 
         try {
@@ -109,11 +104,11 @@ public class DockerRiakCluster {
         }
         pullDockerImage(properties.getImageName());
 
-        logger.debug("Cluster '{}' is starting...", properties.getClusterName());
+        logger.debug("Cluster '{}' is starting...", clusterName);
 
         CountDownLatch clusterStartLatch = new CountDownLatch(properties.getNodes());
         List<Thread> threads = IntStream.range(0, properties.getNodes()).mapToObj(i -> new Thread(() -> {
-            startNode(properties.getClusterName(), properties.getClusterName() + "-" + i, properties.getImageName());
+            startNode(clusterName, clusterName + "-" + i, properties.getImageName());
             clusterStartLatch.countDown();
         })).collect(Collectors.toList());
         threads.forEach(Thread::start);
@@ -128,12 +123,12 @@ public class DockerRiakCluster {
             throw new RuntimeException(e.getMessage(), e);
         }
         createBucketTypes(dockerClient, ipMap.keySet().iterator().next());
-        logger.info("Cluster '{}' is ready ({} node(s)).", properties.getClusterName(), joinedNodes);
+        logger.info("Cluster '{}' is ready ({} node(s)).", clusterName, joinedNodes);
     }
 
     public void stop() {
         ipMap.keySet().forEach(c -> DockerRiakUtils.deleteNode(dockerClient, c));
-        logger.info("Cluster '{}' is stopped ({} node(s)).", properties.getClusterName(), ipMap.size());
+        logger.info("Cluster '{}' is stopped ({} node(s)).", clusterName, ipMap.size());
 
         ipMap.clear();
     }
@@ -241,11 +236,6 @@ public class DockerRiakCluster {
 
         public Builder withImageName(String imageName) {
             properties.setImageName(imageName);
-            return this;
-        }
-
-        public Builder withClusterName(String clusterName) {
-            properties.setClusterName(clusterName);
             return this;
         }
 

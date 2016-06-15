@@ -12,7 +12,6 @@ public class ClusterProperties {
     private TimeUnit timeUnit = TimeUnit.MINUTES;
     private int nodes = 1;
     private String imageName;
-    private String clusterName;
     private DefaultDockerClient.Builder dockerClientBuilder;
     private Map<String, Map<String, String>> bucketTypes;
 
@@ -25,7 +24,6 @@ public class ClusterProperties {
         this.timeUnit = properties.timeUnit;
         this.nodes = properties.nodes;
         this.imageName = properties.imageName;
-        this.clusterName = properties.clusterName;
         this.dockerClientBuilder = properties.dockerClientBuilder;
         this.bucketTypes = properties.getBucketTypes().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> new HashMap<>(e.getValue())));
@@ -61,14 +59,6 @@ public class ClusterProperties {
 
     public void setImageName(String imageName) {
         this.imageName = imageName;
-    }
-
-    public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
     }
 
     public DefaultDockerClient.Builder getDockerClientBuilder() {
