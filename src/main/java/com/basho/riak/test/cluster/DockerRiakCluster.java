@@ -9,6 +9,8 @@ import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.InetAddress;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -20,6 +22,7 @@ public class DockerRiakCluster {
 
     private static final Logger logger = LoggerFactory.getLogger(DockerRiakCluster.class);
 
+    private static final String OS = System.getProperty("os.name").toLowerCase();
     private static final String DEFAULT_DOCKER_IMAGE = "basho/riak-ts";
 
     private static final String ENV_DOCKER_IMAGE = System.getProperty("com.basho.riak.test.cluster.image-name");
@@ -55,10 +58,10 @@ public class DockerRiakCluster {
     /**
      * Creates new instance of DockerRiakCluster
      *
-     * @param nodes       a number of cluster nodes
-     * @param imageName   name of Docker image for building cluster
-     * @param timeout     cluster startup timeout
-     * @param timeUnit    unit of granularity
+     * @param nodes     a number of cluster nodes
+     * @param imageName name of Docker image for building cluster
+     * @param timeout   cluster startup timeout
+     * @param timeUnit  unit of granularity
      */
     public DockerRiakCluster(int nodes, String imageName, long timeout, TimeUnit timeUnit) {
         this(new ClusterProperties() {{
@@ -123,6 +126,7 @@ public class DockerRiakCluster {
             throw new RuntimeException(e.getMessage(), e);
         }
         createBucketTypes(dockerClient, ipMap.keySet().iterator().next());
+        checkClusterAccess();
         logger.info("Cluster '{}' is ready ({} node(s)).", clusterName, joinedNodes);
     }
 
@@ -193,6 +197,29 @@ public class DockerRiakCluster {
                 }
             }
         } catch (Exception e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    private void checkClusterAccess() {
+        if (getIps().isEmpty()) {
+            logger.warn("Cluster contains 0 nodes");
+            return;
+        }
+        String host = getIps().iterator().next();
+        try {
+            if ((OS.contains("win") || OS.contains("mac")) && !InetAddress.getByName(host).isReachable(1000)) {
+                stop(); // stop cluster if it's unreachable
+                String command = String.format(OS.contains("win")
+                        ? "route ADD 172.17.0.0 MASK 255.255.0.0 %s"
+                        : "sudo route -n add 172.17.0.0/16 %s", dockerClient.getHost());
+                throw new IllegalStateException(String.format(
+                        "\n==================================================================================\n" +
+                                "\tDockerized Riak cluster is unreachable. Static route must be added:\n\t\t%s" +
+                                "\n==================================================================================\n",
+                        command));
+            }
+        } catch (IOException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
     }
