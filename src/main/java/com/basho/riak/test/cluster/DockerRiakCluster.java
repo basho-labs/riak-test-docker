@@ -93,12 +93,27 @@ public class DockerRiakCluster {
             this.properties.setImageName(DEFAULT_DOCKER_IMAGE);
         }
 
-        try {
-            this.dockerClient = Optional.ofNullable(properties.getDockerClientBuilder())
-                    .orElse(DefaultDockerClient.fromEnv()).build();
-        } catch (DockerCertificateException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
+        this.dockerClient = Optional.ofNullable(properties.getDockerClientBuilder())
+                .orElseGet(() -> {
+                    if ((OS.contains("win") || OS.contains("mac"))
+                            && (!System.getenv().containsKey("DOCKER_HOST") || !System.getenv().containsKey("DOCKER_CERT_PATH"))) {
+                        String command = OS.contains("win") ? "set" : "export";
+                        throw new IllegalStateException(
+                                "\n==================================================================================\n" +
+                                        "\tDocker is not configured properly. Environment variables must be configured:\n\t\t" +
+                                        command + " DOCKER_HOST=\"tcp://<Docker machine ip>:2376\"\n\t\t" +
+                                        command + " DOCKER_CERT_PATH=<path to Docker cert>\n\n\t" +
+                                        "Or just use 'docker-machine env' command if you are using docker-machine utility." +
+                                        "\n==================================================================================\n");
+
+                    }
+
+                    try {
+                        return DefaultDockerClient.fromEnv();
+                    } catch (DockerCertificateException e) {
+                        throw new RuntimeException(e.getMessage(), e);
+                    }
+                }).build();
     }
 
     public void start() {
@@ -206,6 +221,8 @@ public class DockerRiakCluster {
             logger.warn("Cluster contains 0 nodes");
             return;
         }
+
+        logger.debug("Checking cluster access...");
         String host = getIps().iterator().next();
         try {
             if ((OS.contains("win") || OS.contains("mac")) && !InetAddress.getByName(host).isReachable(1000)) {
