@@ -146,10 +146,12 @@ public class DockerRiakCluster {
     }
 
     public void stop() {
-        ipMap.keySet().forEach(c -> DockerRiakUtils.deleteNode(dockerClient, c));
-        logger.info("Cluster '{}' is stopped ({} node(s)).", clusterName, ipMap.size());
-
-        ipMap.clear();
+        if (ipMap != null) {
+            ipMap.keySet().forEach(c -> DockerRiakUtils.deleteNode(dockerClient, c));
+            logger.info("Cluster '{}' is stopped ({} node(s)).", clusterName, ipMap.size());
+            ipMap.clear();
+        }
+        Optional.ofNullable(dockerClient).ifPresent(DockerClient::close);
     }
 
     public Set<String> getIps() {
