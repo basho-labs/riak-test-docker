@@ -23,7 +23,7 @@ public class DockerRiakCluster {
     private static final Logger logger = LoggerFactory.getLogger(DockerRiakCluster.class);
 
     private static final String OS = System.getProperty("os.name").toLowerCase();
-    private static final String DEFAULT_DOCKER_IMAGE = "basho/riak-ts";
+    public static final String DEFAULT_DOCKER_IMAGE = "basho/riak-ts";
 
     private static final String ENV_DOCKER_IMAGE = System.getProperty("com.basho.riak.test.cluster.image-name");
     private static final String ENV_DOCKER_TIMEOUT = System.getProperty("com.basho.riak.test.cluster.timeout");
@@ -33,6 +33,8 @@ public class DockerRiakCluster {
     private final AtomicInteger joinedNodes;
     private final String clusterName;
     private final ClusterProperties properties;
+
+    private boolean started = false;
 
     /**
      * Creates new instance of DockerRiakCluster.
@@ -114,6 +116,8 @@ public class DockerRiakCluster {
                         throw new RuntimeException(e.getMessage(), e);
                     }
                 }).build();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(DockerRiakCluster.this::stop));
     }
 
     public void start() {
@@ -123,6 +127,7 @@ public class DockerRiakCluster {
         pullDockerImage(properties.getImageName());
 
         logger.debug("Cluster '{}' is starting...", clusterName);
+        started = true;
 
         CountDownLatch clusterStartLatch = new CountDownLatch(properties.getNodes());
         List<Thread> threads = IntStream.range(0, properties.getNodes()).mapToObj(i -> new Thread(() -> {
@@ -146,12 +151,14 @@ public class DockerRiakCluster {
     }
 
     public void stop() {
-        if (ipMap != null) {
-            ipMap.keySet().forEach(c -> DockerRiakUtils.deleteNode(dockerClient, c));
-            logger.info("Cluster '{}' is stopped ({} node(s)).", clusterName, ipMap.size());
-            ipMap.clear();
+        if (!started) {
+            return;
         }
+        DockerRiakUtils.removeCluster(dockerClient, clusterName);
+        ipMap.clear();
         Optional.ofNullable(dockerClient).ifPresent(DockerClient::close);
+        started = false;
+        logger.info("Cluster '{}' is stopped.", clusterName);
     }
 
     public Set<String> getIps() {
@@ -162,18 +169,12 @@ public class DockerRiakCluster {
         // add :latest suffix if no tag provided
         String taggedName = name.contains(":") ? name : name + ":latest";
 
-        logger.debug("Verifying Docker image '{}'...", taggedName);
+        logger.debug("Checking Docker image '{}'...", taggedName);
         try {
-            if (dockerClient.listImages(DockerClient.ListImagesParam.byName(taggedName)).stream()
-                    .noneMatch(i -> i.repoTags().contains(taggedName))) {
-
-                // pull docker image if there is no such image locally
-                logger.debug("Docker image '{}' will be pulled from DockerHub", taggedName);
-                dockerClient.pull(properties.getImageName());
-                logger.info("Docker image '{}' was pulled from DockerHub", taggedName);
-            } else {
-                logger.debug("Docker image '{}' is already present. Pulling skipped", taggedName);
-            }
+            // pull docker image if there is no such image locally
+            logger.debug("Docker image '{}' will be synchronized with DockerHub", taggedName);
+            dockerClient.pull(properties.getImageName());
+            logger.info("Docker image '{}' was synchronized with DockerHub", taggedName);
         } catch (DockerException | InterruptedException e) {
             throw new RuntimeException(e.getMessage(), e);
         }

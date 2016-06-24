@@ -11,7 +11,7 @@ public class ClusterProperties {
     private long timeout = 1;
     private TimeUnit timeUnit = TimeUnit.MINUTES;
     private int nodes = 1;
-    private String imageName;
+    private String imageName = DockerRiakCluster.DEFAULT_DOCKER_IMAGE;
     private DefaultDockerClient.Builder dockerClientBuilder;
     private Map<String, Map<String, String>> bucketTypes;
 

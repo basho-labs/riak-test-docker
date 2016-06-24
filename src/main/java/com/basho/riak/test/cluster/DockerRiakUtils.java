@@ -2,6 +2,7 @@ package com.basho.riak.test.cluster;
 
 import com.spotify.docker.client.DockerClient;
 import com.spotify.docker.client.LogStream;
+import com.spotify.docker.client.exceptions.DockerException;
 import com.spotify.docker.client.messages.*;
 
 import java.util.concurrent.TimeUnit;
@@ -31,6 +32,16 @@ public class DockerRiakUtils {
             dockerExec(dockerClient, containerCreation.id(), new String[]{"riak-admin", "wait-for-service", "riak_kv"});
             return containerCreation.id();
         } catch (Exception e) {
+            throw new RuntimeException(e.getMessage(), e);
+        }
+    }
+
+    public static void removeCluster(DockerClient dockerClient, String clusterName) {
+        try {
+            dockerClient.listContainers(DockerClient.ListContainersParam.allContainers()).stream()
+                    .filter(c -> c.names().stream().anyMatch(n -> n.startsWith("/" + clusterName)))
+                    .forEach(c -> deleteNode(dockerClient, c));
+        } catch (DockerException | InterruptedException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
     }
