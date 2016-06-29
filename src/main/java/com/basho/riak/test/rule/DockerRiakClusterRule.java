@@ -59,4 +59,8 @@ public class DockerRiakClusterRule implements TestRule {
                 .map(DockerRiakCluster::getIps)
                 .orElse(Collections.emptySet());
     }
+
+    public boolean enabled() {
+        return !disabled;
+    }
 }

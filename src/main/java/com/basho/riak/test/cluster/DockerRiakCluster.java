@@ -2,9 +2,15 @@ package com.basho.riak.test.cluster;
 
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
+import com.spotify.docker.client.ProgressHandler;
 import com.spotify.docker.client.exceptions.DockerCertificateException;
 import com.spotify.docker.client.exceptions.DockerException;
+import com.spotify.docker.client.messages.ImageInfo;
 import com.spotify.docker.client.messages.NetworkSettings;
+import com.spotify.docker.client.messages.ProgressMessage;
+import com.spotify.docker.client.shaded.com.fasterxml.jackson.annotation.JsonInclude;
+import com.spotify.docker.client.shaded.com.fasterxml.jackson.databind.ObjectMapper;
+import com.spotify.docker.client.shaded.com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,19 +104,6 @@ public class DockerRiakCluster {
 
         this.dockerClient = Optional.ofNullable(properties.getDockerClientBuilder())
                 .orElseGet(() -> {
-                    if ((OS.contains("win") || OS.contains("mac"))
-                            && (!System.getenv().containsKey("DOCKER_HOST") || !System.getenv().containsKey("DOCKER_CERT_PATH"))) {
-                        String command = OS.contains("win") ? "set" : "export";
-                        throw new IllegalStateException(
-                                "\n==================================================================================\n" +
-                                        "\tDocker is not configured properly. Environment variables must be configured:\n\t\t" +
-                                        command + " DOCKER_HOST=\"tcp://<Docker machine ip>:2376\"\n\t\t" +
-                                        command + " DOCKER_CERT_PATH=<path to Docker cert>\n\n\t" +
-                                        "Or just use 'docker-machine env' command if you are using docker-machine utility." +
-                                        "\n==================================================================================\n");
-
-                    }
-
                     try {
                         return DefaultDockerClient.fromEnv();
                     } catch (DockerCertificateException e) {
@@ -118,6 +111,15 @@ public class DockerRiakCluster {
                     }
                 }).build();
 
+        try {
+            dockerClient.ping();
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "\n==================================================================================\n" +
+                        "\tDocker is not not running or it is not configured properly" +
+                        "\n==================================================================================\n",
+                e);
+        }
         Runtime.getRuntime().addShutdownHook(new Thread(DockerRiakCluster.this::stop));
     }
 
@@ -125,7 +127,21 @@ public class DockerRiakCluster {
         if (properties.getNodes() <= 0) {
             throw new IllegalStateException("Nodes count must be grater than 0");
         }
+
         pullDockerImage(properties.getImageName());
+
+        try {
+            final ImageInfo info = dockerClient.inspectImage(properties.getImageName());
+            logger.info("The '{}' docker image will be used:\n{}",
+                    properties.getImageName(),
+                    new ObjectMapper()
+                            .setSerializationInclusion(JsonInclude.Include.NON_DEFAULT)
+                            .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
+                            .writerWithDefaultPrettyPrinter()
+                            .writeValueAsString(info));
+        } catch (Exception e) {
+            logger.error("Can't dump docker image info.", e);
+        }
 
         logger.debug("Cluster '{}' is starting...", clusterName);
         started = true;
@@ -166,15 +182,22 @@ public class DockerRiakCluster {
         return new HashSet<>(ipMap.values());
     }
 
-    private void pullDockerImage(String name) {
+    private void pullDockerImage(String imageName) {
         // add :latest suffix if no tag provided
-        String taggedName = name.contains(":") ? name : name + ":latest";
-
-        logger.debug("Checking Docker image '{}'...", taggedName);
+        final String taggedName = imageName.contains(":") ? imageName : imageName + ":latest";
+        logger.debug("Docker image '{}' will be synchronized with DockerHub", taggedName);
         try {
             // pull docker image if there is no such image locally
-            logger.debug("Docker image '{}' will be synchronized with DockerHub", taggedName);
-            dockerClient.pull(properties.getImageName());
+            dockerClient.pull(taggedName, new ProgressHandler() {
+                @Override
+                public void progress(ProgressMessage message) throws DockerException {
+                    if (message.progress() == null && message.progressDetail() == null) {
+                        logger.debug("{}", message.status());
+                    } else {
+                        logger.trace("{} '{}': {}", message.status(), message.progress(), message.progressDetail());
+                    }
+                }
+            });
             logger.info("Docker image '{}' was synchronized with DockerHub", taggedName);
         } catch (DockerException | InterruptedException e) {
             throw new RuntimeException(e.getMessage(), e);
