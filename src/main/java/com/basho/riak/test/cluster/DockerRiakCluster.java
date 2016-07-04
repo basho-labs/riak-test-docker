@@ -87,6 +87,7 @@ public class DockerRiakCluster {
 
         if (StringUtils.isNotBlank(ENV_DOCKER_TIMEOUT)) {
             this.properties.setTimeout(Long.parseLong(ENV_DOCKER_TIMEOUT));
+            this.properties.setTimeUnit(TimeUnit.MINUTES);
         }
 
         if (StringUtils.isNotBlank(ENV_DOCKER_IMAGE)) {
