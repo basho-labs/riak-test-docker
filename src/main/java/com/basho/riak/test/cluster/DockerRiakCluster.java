@@ -1,16 +1,14 @@
 package com.basho.riak.test.cluster;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.spotify.docker.client.DefaultDockerClient;
 import com.spotify.docker.client.DockerClient;
-import com.spotify.docker.client.ProgressHandler;
 import com.spotify.docker.client.exceptions.DockerCertificateException;
 import com.spotify.docker.client.exceptions.DockerException;
 import com.spotify.docker.client.messages.ImageInfo;
 import com.spotify.docker.client.messages.NetworkSettings;
-import com.spotify.docker.client.messages.ProgressMessage;
-import com.spotify.docker.client.shaded.com.fasterxml.jackson.annotation.JsonInclude;
-import com.spotify.docker.client.shaded.com.fasterxml.jackson.databind.ObjectMapper;
-import com.spotify.docker.client.shaded.com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -188,14 +186,11 @@ public class DockerRiakCluster {
         logger.debug("Docker image '{}' will be synchronized with DockerHub", taggedName);
         try {
             // pull docker image if there is no such image locally
-            dockerClient.pull(taggedName, new ProgressHandler() {
-                @Override
-                public void progress(ProgressMessage message) throws DockerException {
-                    if (message.progress() == null && message.progressDetail() == null) {
-                        logger.debug("{}", message.status());
-                    } else {
-                        logger.trace("{} '{}': {}", message.status(), message.progress(), message.progressDetail());
-                    }
+            dockerClient.pull(taggedName, message -> {
+                if (message.progress() == null && message.progressDetail() == null) {
+                    logger.debug("{}", message.status());
+                } else {
+                    logger.trace("{} '{}': {}", message.status(), message.progress(), message.progressDetail());
                 }
             });
             logger.info("Docker image '{}' was synchronized with DockerHub", taggedName);
