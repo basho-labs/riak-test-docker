@@ -14,6 +14,7 @@ public class ClusterProperties {
     private String imageName = DockerRiakCluster.DEFAULT_DOCKER_IMAGE;
     private DefaultDockerClient.Builder dockerClientBuilder;
     private Map<String, Map<String, String>> bucketTypes;
+    private boolean forcePull = true;
 
     public ClusterProperties() {
         this.bucketTypes = new HashMap<>();
@@ -27,6 +28,7 @@ public class ClusterProperties {
         this.dockerClientBuilder = properties.dockerClientBuilder;
         this.bucketTypes = properties.getBucketTypes().entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, e -> new HashMap<>(e.getValue())));
+        this.forcePull = properties.forcePull;
     }
 
     public long getTimeout() {
@@ -71,5 +73,13 @@ public class ClusterProperties {
 
     public Map<String, Map<String, String>> getBucketTypes() {
         return bucketTypes;
+    }
+
+    public boolean isForcePull() {
+        return forcePull;
+    }
+
+    public void setForcePull(boolean forcePull) {
+        this.forcePull = forcePull;
     }
 }

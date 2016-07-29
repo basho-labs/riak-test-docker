@@ -113,10 +113,10 @@ public class DockerRiakCluster {
             dockerClient.ping();
         } catch (Exception e) {
             throw new IllegalStateException(
-                "\n==================================================================================\n" +
-                        "\tDocker is not not running or it is not configured properly" +
-                        "\n==================================================================================\n",
-                e);
+                    "\n==================================================================================\n" +
+                            "\tDocker is not not running or it is not configured properly" +
+                            "\n==================================================================================\n",
+                    e);
         }
         Runtime.getRuntime().addShutdownHook(new Thread(DockerRiakCluster.this::stop));
     }
@@ -185,7 +185,14 @@ public class DockerRiakCluster {
         final String taggedName = imageName.contains(":") ? imageName : imageName + ":latest";
         logger.debug("Docker image '{}' will be synchronized with DockerHub", taggedName);
         try {
-            // pull docker image if there is no such image locally
+            // if pulling is not forced - skip it if requested image already present locally
+            if (!properties.isForcePull() && dockerClient.listImages(DockerClient.ListImagesParam.byName(taggedName))
+                    .stream().anyMatch(i -> i.repoTags().contains(taggedName))) {
+                logger.debug("Pulling skipped because it's not forced and image '{}' is already present.", taggedName);
+                return;
+            }
+
+            // pull docker image
             dockerClient.pull(taggedName, message -> {
                 if (message.progress() == null && message.progressDetail() == null) {
                     logger.debug("{}", message.status());
@@ -193,7 +200,6 @@ public class DockerRiakCluster {
                     logger.trace("{} '{}': {}", message.status(), message.progress(), message.progressDetail());
                 }
             });
-            logger.info("Docker image '{}' was synchronized with DockerHub", taggedName);
         } catch (DockerException | InterruptedException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
@@ -312,6 +318,11 @@ public class DockerRiakCluster {
 
         public Builder withBucketType(String bucketType, Map<String, String> props) {
             this.properties.getBucketTypes().put(bucketType, props);
+            return this;
+        }
+
+        public Builder withForcePull(boolean forcePull) {
+            this.properties.setForcePull(forcePull);
             return this;
         }
 
