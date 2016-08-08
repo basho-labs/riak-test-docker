@@ -33,7 +33,7 @@ The second thing which **must** be configured for MacOS and Windows is a static 
 
 ## Using riak-test-docker
 
-To use riak-test-docker, you muust include the `riak-test-docker` artifact into your project using Gradle, Maven or SBT.
+To use riak-test-docker, you must include the `riak-test-docker` artifact into your project using Gradle, Maven or SBT.
 
 Make sure you've added the Basho Bintray repo to your project by going here [https://bintray.com/basho/data-platform](https://bintray.com/basho/data-platform) and clicking the blue "SET ME UP!" button on the right-hand side of the page.
 
@@ -44,7 +44,7 @@ Make sure you've added the Basho Bintray repo to your project by going here [htt
 <dependency>
   <groupId>com.basho.riak.test</groupId>
   <artifactId>riak-test-docker</artifactId>
-  <version>1.0-SNAPSHOT</version>
+  <version>1.1</version>
   <scope>test</scope>
 </dependency>
 ```
@@ -53,7 +53,7 @@ Make sure you've added the Basho Bintray repo to your project by going here [htt
 
 ```groovy
 ext {
-  riakTestDockerVersion = '1.0-SNAPSHOT'
+  riakTestDockerVersion = '1.1'
 }
 
 dependencies {
@@ -65,7 +65,7 @@ dependencies {
 
 ```scala
 libraryDependencies ++= {
-  val riakTestDockerVersion = "1.0-SNAPSHOT"
+  val riakTestDockerVersion = "1.1"
 
   Seq(
     "com.basho.riak.test" % "riak-test-docker" % riakTestDockerVersion % "test"
@@ -118,7 +118,7 @@ imageName | The name of the Docker image to use | basho/riak-ts:latest
 bucketTypes | The list of bucket types which should be created and activated after cluster start | n/d
 dockerClientBuilder | The custom builder for the Docker client | n/d
 
-To make process of creation and configuration of `DockerRiakCluster` simple and flexible, a special builder was introduced: `com.basho.riak.test.cluster.DockerRiakCluster.Builder`. It contains methods which allow you to set all the properties listed earlier. An example of it's usage is shown below:
+To make the process of creation and configuration of `DockerRiakCluster` simple and flexible, a special builder was introduced: `com.basho.riak.test.cluster.DockerRiakCluster.Builder`. It contains methods which allow you to set all the properties listed earlier. An example of its usage is shown below:
 
 ```java
   DockerRiakCluster riakCluster = DockerRiakCluster.builder()
