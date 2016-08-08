@@ -20,7 +20,7 @@ For using `riak-test-docker` framework, [`Docker`](https://www.docker.com) must 
 
 #### Additional environment configuration
 
-Due to the implementation of Docker on MacOS and Windows, before using `riak-test-docker` the following environment variables **must** be configured:
+Due to the implementation of Docker on MacOS and Windows, the following environment variables **must** be configured before using `riak-test-docker` :
 
 * DOCKER_HOST="tcp://\<Docker Host IP\>:2376
 * DOCKER_CERT_PATH=\<path to Docker cert\>
@@ -33,9 +33,9 @@ The second thing which **must** be configured for MacOS and Windows is a static 
 
 ## Using riak-test-docker
 
-Include the `riak-test-docker` artifact into your project using Gradle, Maven or SBT.
+To use riak-test-docker, you muust include the `riak-test-docker` artifact into your project using Gradle, Maven or SBT.
 
-Make sure you've added the Basho Bintray repo to your project by going here [https://bintray.com/basho/data-platform](https://bintray.com/basho/data-platform) and clicking the blue "SET ME UP!" button on the right side of the page.
+Make sure you've added the Basho Bintray repo to your project by going here [https://bintray.com/basho/data-platform](https://bintray.com/basho/data-platform) and clicking the blue "SET ME UP!" button on the right-hand side of the page.
 
 
 ##### Maven
@@ -75,7 +75,7 @@ libraryDependencies ++= {
 
 ## Quick Example
 
-Before we go into details of how to configure and use ```riak-test-docker``` in your tests, let's take a quick look at simple example.
+Before we go into details of how to configure and use ```riak-test-docker``` in your tests, let's take a quick look at a simple example.
 
 ```java
   @Test
@@ -101,7 +101,7 @@ Before we go into details of how to configure and use ```riak-test-docker``` in 
 This test method illustrates the simplest use-case of the `riak-test-docker` framework. Basically, it consists only of 3 steps:
 
 1. Create a new instance of DockerRiakCluster
-2. Start the riak docker cluster
+2. Start the Riak Docker cluster
 3. Connect to the started cluster using `com.basho.riak.test.cluster.DockerRiakCluster#getIps` method which provides access to the IP addresses of the started Riak nodes.
 4. When the cluster is no longer needed, you ***must*** stop it.
 
@@ -129,11 +129,11 @@ To make process of creation and configuration of `DockerRiakCluster` simple and 
     .build();
 ```
 
-**Note:** the usage of cluster builder is strongly recommended in most cases, because the constructor-based approach could decrease code redability and quality.
+**Note:** Using the cluster builder is strongly recommended in most cases. The constructor-based approach can decrease code redability and quality.
 
 #### System properties
 
-The following system properties may be used to override global cluster configuration:
+The following system properties may be used to override the global cluster configuration:
 
 Property | Description
 ---------|------------
@@ -160,7 +160,7 @@ The following creates a static `@ClassRule` which will be invoked once at initia
 ```
 ### @OverrideRiakClusterConfig annotation
 
-Test classes are often built according to some class hierarchy. This usually happens when developers don't want to duplicate configuration code which is common for most of test classes. Common code is often kept in some base class. In such a situation, `DockerRiakClusterRule` could be declared as a static field (`@ClassRule`) in the base class to avoid keeping it in each test class. Such an approach is reasonable until all your tests require identical cluster configuration. But if, for example, there is a need to increase the number of nodes for particular class without changing other common logic, this could be a real problem. In this case, you have to totally duplicate the logic of base class inside the current class or go up a level in the class hierarhy and create additional middle layer for base test classes.
+Test classes are often built according to some class hierarchy. This usually happens when developers don't want to duplicate configuration code which is common for most of test classes. Common code is often kept in some base class. In such a situation, `DockerRiakClusterRule` could be declared as a static field (`@ClassRule`) in the base class to avoid keeping it in each test class. Such an approach is reasonable until all your tests require identical cluster configuration. But if, for example, there is a need to increase the number of nodes for particular class without changing other common logic, this could be a real problem. In this case, you have to totally duplicate the logic of base class inside the current class or go up a level in the class hierarhy and create additional middle layer for the base test classes.
 
 To solve such difficulties, the `@com.basho.riak.test.rule.annotations.OverrideRiakClusterConfig` annotation was introduced. It allows you to override the amount of nodes and starting timeout for particular class:
 
@@ -206,6 +206,6 @@ public static DockerRiakClusterRule riakCluster = new DockerRiakClusterRule(
         DockerRiakCluster.builder().withTimeout(3), true);
 ```
 
-If this parameter is set `true`, the docker cluster will not be started and `com.basho.riak.test.rule.DockerRiakClusterRule#getIps` will return an empty set.
+If this parameter is set `true`, the Docker cluster will not be started and `com.basho.riak.test.rule.DockerRiakClusterRule#getIps` will return an empty set.
 
 This feature might be helpful if there is a need to disable a rule according to some condition (for example, disable if some system property is configured).
