@@ -1,5 +1,5 @@
 # Riak Test Docker Framework
-`riak-test-docker` is a test framework designed to manage docker-based Riak cluster in a test environment.
+`riak-test-docker` is a test framework designed to manage a docker-based Riak cluster in a test environment.
 
 ## Table of contents
 * [`Prerequisites`](#prerequisites)
